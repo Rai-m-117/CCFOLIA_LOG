@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TRPGログ抽出ツール — PC名・ダイス結果・フリーキーワード対応</title>
+  <style>
+    body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,'Hiragino Kaku Gothic ProN',"Noto Sans JP",sans-serif;margin:18px;background:#f7f8fb;color:#111}
+    h1{font-size:20px;margin-bottom:6px}
+    textarea{width:100%;height:260px;padding:10px;font-family:monospace;background:white;border:1px solid #d6d9e6;border-radius:6px}
+    .controls{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #2b6cb0;background:#3182ce;color:white;cursor:pointer;width:100px}
+    button.secondary{background:#edf2f7;color:#111;border:1px solid #cbd5e1}
+    .button-row{display:flex;gap:8px;margin-top:4px}
+    .results{margin-top:16px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #e6e8f2;text-align:left;font-size:13px}
+    .badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#e2e8f0;font-size:12px;margin-left:6px}
+    input[type=text]{padding:6px;border-radius:6px;border:1px solid #d0d6ea;width:100%}
+  </style>
+</head>
+<body>
+  <h1>TRPGログ抽出ツール</h1>
+  <p>CCFOLIAのチャットログから指定したPC名・ダイス結果数値・キーワードを含む行を抽出します。<br>入力が空欄の場合は条件は無視されます。</p>
+
+  <label><strong>ログ入力（HTMLのまま貼ってOK）</strong></label>
+  <textarea id="inputLog" placeholder="ここにHTMLログを貼り付けてください..."></textarea>
+
+  <div class="controls">
+    <div>
+      <label>PC名 (カンマ区切りで複数指定可)</label>
+      <input id="pcName" type="text" />
+    </div>
+
+    <div>
+      <label>ダイス結果数値 (カンマ区切りで複数指定可)</label>
+      <input id="diceValue" type="text" />
+    </div>
+
+    <div>
+      <label>フリーキーワード</label>
+      <input id="keywords" type="text" />
+    </div>
+
+    <div class="button-row">
+      <button id="extractBtn">抽出</button>
+      <button id="clearBtn" class="secondary">クリア</button>
+      <label style="margin-left:auto"><input id="caseSensitive" type="checkbox" /> 大文字小文字を区別</label>
+    </div>
+  </div>
+
+  <div class="results">
+    <h2>抽出結果<span id="counts" class="badge">0件</span></h2>
+    <table id="resultTable">
+      <thead>
+        <tr><th>#</th><th>行テキスト</th><th>PC名</th><th>ダイス結果</th><th>成否</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    const input = document.getElementById('inputLog');
+    const extractBtn = document.getElementById('extractBtn');
+    const resultTableBody = document.querySelector('#resultTable tbody');
+    const keywordsInput = document.getElementById('keywords');
+    const pcNameInput = document.getElementById('pcName');
+    const diceValueInput = document.getElementById('diceValue');
+    const counts = document.getElementById('counts');
+    const caseSensitive = document.getElementById('caseSensitive');
+    const clearBtn = document.getElementById('clearBtn');
+
+    function escapeRegex(s){
+      return s.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+    }
+
+    function parseLogLine(line) {
+      const match = line.match(/^\[[^\]]*\]\s*([^:]+)\s*:\s*.*?＞\s*(\d+)\s*＞\s*(\S+)/);
+      if (!match) return null;
+      return {
+        pc: match[1].trim(),
+        dice: match[2].trim(),
+        result: match[3].trim(),
+        text: line.trim()
+      };
+    }
+
+    function extractLines(){
+      const raw = input.value || '';
+      const pcNames = pcNameInput.value.split(',').map(n=>n.trim()).filter(Boolean);
+      const diceValues = diceValueInput.value.split(',').map(v=>v.trim()).filter(Boolean);
+      const keyword = keywordsInput.value.trim();
+      const flags = caseSensitive.checked ? '' : 'i';
+      const lines = raw.split(/\r?\n/);
+      const results = [];
+
+      lines.forEach((line, idx)=>{
+        const parsed = parseLogLine(line);
+        if (!parsed) return;
+
+        const pcMatch = pcNames.length === 0 || pcNames.some(n => new RegExp(escapeRegex(n), flags).test(parsed.pc));
+        const diceMatch = diceValues.length === 0 || diceValues.some(v => parsed.dice === v);
+        const kwMatch = !keyword || new RegExp(escapeRegex(keyword), flags).test(line);
+
+        if (pcMatch && diceMatch && kwMatch) {
+          results.push({ i: idx + 1, ...parsed });
+        }
+      });
+
+      resultTableBody.innerHTML = '';
+      results.forEach((r, idx)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${idx + 1}</td><td>${r.text}</td><td>${r.pc}</td><td>${r.dice}</td><td>${r.result}</td>`;
+        resultTableBody.appendChild(tr);
+      });
+
+      counts.textContent = results.length + '件';
+    }
+
+    extractBtn.addEventListener('click', extractLines);
+    clearBtn.addEventListener('click', ()=>{
+      input.value=''; pcNameInput.value=''; diceValueInput.value=''; keywordsInput.value=''; resultTableBody.innerHTML=''; counts.textContent='0件';
+    });
+
+    input.addEventListener('dragover', e=>{ e.preventDefault(); });
+    input.addEventListener('drop', e=>{
+      e.preventDefault();
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = ev => input.value = ev.target.result;
+      reader.readAsText(f, 'utf-8');
+    });
+  </script>
+</body>
+</html>
