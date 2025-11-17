@@ -38,7 +38,7 @@
     </div>
 
     <div>
-      <label>フリーキーワード</label>
+      <label>フリーキーワード (カンマ区切りで複数指定可)</label>
       <input id="keywords" type="text" />
     </div>
 
@@ -85,37 +85,38 @@
       };
     }
 
-    function extractLines(){
-      const raw = input.value || '';
-      const pcNames = pcNameInput.value.split(',').map(n=>n.trim()).filter(Boolean);
-      const diceValues = diceValueInput.value.split(',').map(v=>v.trim()).filter(Boolean);
-      const keyword = keywordsInput.value.trim();
-      const flags = caseSensitive.checked ? '' : 'i';
-      const lines = raw.split(/\r?\n/);
-      const results = [];
+function extractLines(){
+  const raw = input.value || '';
+  const pcNames = pcNameInput.value.split(',').map(n=>n.trim()).filter(Boolean);
+  const diceValues = diceValueInput.value.split(',').map(v=>v.trim()).filter(Boolean);
+  const keywords = keywordsInput.value.split(',').map(k=>k.trim()).filter(Boolean);
+  const flags = caseSensitive.checked ? '' : 'i';
+  const lines = raw.split(/\r?\n/);
+  const results = [];
 
-      lines.forEach((line, idx)=>{
-        const parsed = parseLogLine(line);
-        if (!parsed) return;
+  lines.forEach((line, idx)=>{
+    const parsed = parseLogLine(line);
+    if (!parsed) return;
 
-        const pcMatch = pcNames.length === 0 || pcNames.some(n => new RegExp(escapeRegex(n), flags).test(parsed.pc));
-        const diceMatch = diceValues.length === 0 || diceValues.some(v => parsed.dice === v);
-        const kwMatch = !keyword || new RegExp(escapeRegex(keyword), flags).test(line);
+    const pcMatch = pcNames.length === 0 || pcNames.some(n => new RegExp(escapeRegex(n), flags).test(parsed.pc));
+    const diceMatch = diceValues.length === 0 || diceValues.some(v => parsed.dice === v);
+    const kwMatch = keywords.length === 0 || keywords.some(k => new RegExp(escapeRegex(k), flags).test(line));
 
-        if (pcMatch && diceMatch && kwMatch) {
-          results.push({ i: idx + 1, ...parsed });
-        }
-      });
-
-      resultTableBody.innerHTML = '';
-      results.forEach((r, idx)=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${idx + 1}</td><td>${r.text}</td><td>${r.pc}</td><td>${r.dice}</td><td>${r.result}</td>`;
-        resultTableBody.appendChild(tr);
-      });
-
-      counts.textContent = results.length + '件';
+    if (pcMatch && diceMatch && kwMatch) {
+      results.push({ i: idx + 1, ...parsed });
     }
+  });
+
+  resultTableBody.innerHTML = '';
+  results.forEach((r, idx)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${idx + 1}</td><td>${r.text}</td><td>${r.pc}</td><td>${r.dice}</td><td>${r.result}</td>`;
+    resultTableBody.appendChild(tr);
+  });
+
+  counts.textContent = results.length + '件';
+}
+
 
     extractBtn.addEventListener('click', extractLines);
     clearBtn.addEventListener('click', ()=>{
